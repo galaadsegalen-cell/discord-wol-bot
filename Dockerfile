@@ -1,6 +1,7 @@
 FROM node:18-slim
 
-RUN apt-get update && apt-get install -y tailscale net-tools
+RUN apt-get update && apt-get install -y curl net-tools
+RUN curl -fsSL https://tailscale.com/install.sh | sh
 
 WORKDIR /usr/src/app
 COPY package*.json ./
