@@ -8,4 +8,4 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 
-CMD tailscaled & sleep 5 && tailscale up --authkey=$TAILSCALE_AUTHKEY && npm start
+CMD tailscaled --tun=userspace-networking --socks5-server=localhost:1055 & sleep 5 && tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=render-wol-bot && npm start
