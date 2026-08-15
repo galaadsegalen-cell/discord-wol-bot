@@ -1,5 +1,12 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const wol = require('wake_on_lan');
+const http = require('http');
+
+// Petit serveur HTTP pour que Render valide le service
+http.createServer((req, res) => {
+  res.write("Bot Discord WOL opérationnel !");
+  res.end();
+}).listen(process.env.PORT || 10000);
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
