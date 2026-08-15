@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const wol = require('wake_on_lan');
 const http = require('http');
 
-// Petit serveur HTTP pour que Render valide le service
+// Petit serveur Web pour garder Render actif
 http.createServer((req, res) => {
   res.write("Bot Discord WOL opérationnel !");
   res.end();
@@ -18,15 +18,26 @@ client.on('ready', () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isButton() || interaction.customId !== 'wake_pc') return;
+  if (!interaction.isButton()) return;
 
-  wol.wake(MAC_ADDRESS, { address: BROADCAST_IP }, (error) => {
-    if (error) {
-      interaction.reply({ content: "❌ Erreur lors de l'envoi du signal.", ephemeral: true });
-    } else {
-      interaction.reply({ content: "⚡ Signal envoyé ! Le PC et le serveur Minecraft s'allument..." });
-    }
-  });
+  // Informe Discord immédiatement qu'on traite l'action (évite le timeout de 3 sec)
+  await interaction.deferReply({ ephemeral: true });
+
+  const id = interaction.customId;
+
+  // Si l'un des boutons d'allumage/démarrage est cliqué
+  if (id === 'wake_pc' || id === 'start_mc' || id.includes('start') || id.includes('wake')) {
+    wol.wake(MAC_ADDRESS, { address: BROADCAST_IP }, (error) => {
+      if (error) {
+        interaction.editReply("❌ Erreur lors de l'envoi du paquet Wake-on-LAN.");
+      } else {
+        interaction.editReply("⚡ Signal d'allumage envoyé ! Le PC Debian et Docker démarrent...");
+      }
+    });
+  } else {
+    // Pour les autres boutons (Arrêter, Redémarrer, Statut)
+    interaction.editReply(`ℹ️ Action \`${id}\` reçue. Le bot WoL gère uniquement l'allumage du PC éteint.`);
+  }
 });
 
 client.login(process.env.DISCORD_TOKEN);
