@@ -1,12 +1,67 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-// Importe ici ta logique ou ton client pour l'API Tuya
+const { Client, GatewayIntentBits } = require('discord.js');
+const crypto = require('crypto');
+const axios = require('axios'); // Assure-toi d'avoir installé axios (npm install axios)
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildsMessages] });
 
-// Exemple de fonction pour allumer la prise via l'API Tuya
-async function turnOnTuyaDevice() {
-    // Ton code d'authentification et requete API Tuya pour mettre le switch à true
-    console.log("Envoi de la commande d'allumage à la prise Tuya...");
+// Configuration Tuya (récupérée automatiquement depuis tes variables d'environnement)
+const TUYA_CLIENT_ID = process.env.TUYA_CLIENT_ID;
+const TUYA_CLIENT_SECRET = process.env.TUYA_CLIENT_SECRET;
+const TUYA_DEVICE_ID = process.env.TUYA_DEVICE_ID;
+// Choisis l'endpoint selon ta région (ex: https://openapi.tuyaeu.com pour l'Europe)
+const TUYA_BASE_URL = 'https://openapi.tuyaeu.com'; 
+
+// Fonction pour générer la signature Tuya et appeler l'API
+async function sendTuyaCommand(commandCode, commandValue) {
+    try {
+        // 1. Obtenir un token d'accès Tuya
+        const t = Date.now().toString();
+        const signUrl = `/v1.0/token?grant_type=1`;
+        const contentHash = crypto.createHash('sha256').update('').digest('hex');
+        const stringToSign = `GET\n${contentHash}\n\n${signUrl}`;
+        const signStr = TUYA_CLIENT_ID + t + stringToSign;
+        const sign = crypto.createHmac('sha256', TUYA_CLIENT_SECRET).update(signStr).digest('hex').toUpperCase();
+
+        const tokenRes = await axios.get(`${TUYA_BASE_URL}/v1.0/token?grant_type=1`, {
+            headers: {
+                client_id: TUYA_CLIENT_ID,
+                sign: sign,
+                t: t,
+                sign_method: 'HMAC-SHA256'
+            }
+        });
+
+        if (!tokenRes.data.success) throw new Error("Erreur d'authentification Tuya");
+        const accessToken = tokenRes.data.result.access_token;
+
+        // 2. Envoyer la commande à la prise (Allumer / Éteindre)
+        const body = {
+            commands: [{ code: commandCode, value: commandValue }]
+        };
+
+        const commandPath = `/v1.0/iot-03/devices/${TUYA_DEVICE_ID}/commands`;
+        const t2 = Date.now().toString();
+        const contentHash2 = crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
+        const stringToSign2 = `POST\n${contentHash2}\n\n${commandPath}`;
+        const signStr2 = TUYA_CLIENT_ID + accessToken + t2 + stringToSign2;
+        const sign2 = crypto.createHmac('sha256', TUYA_CLIENT_SECRET).update(signStr2).digest('hex').toUpperCase();
+
+        await axios.post(`${TUYA_BASE_URL}${commandPath}`, body, {
+            headers: {
+                client_id: TUYA_CLIENT_ID,
+                access_token: accessToken,
+                sign: sign2,
+                t: t2,
+                sign_method: 'HMAC-SHA256',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log(`Commande Tuya envoyée avec succès (${commandCode} : ${commandValue})`);
+    } catch (error) {
+        console.error("Erreur Tuya:", error.response?.data || error.message);
+        throw error;
+    }
 }
 
 client.once('ready', () => {
@@ -18,18 +73,13 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
     if (interaction.customId === 'btn_allumer_pc') {
-        // 1. On répond tout de suite à l'interaction pour éviter l'expiration
-        await interaction.reply({ content: "🚀 **Démarrage du PC en cours...** (Allumage de la prise Tuya)", ephemeral: false });
+        await interaction.reply({ content: "🚀 **Démarrage du PC en cours...** (Activation de la prise Tuya)", ephemeral: false });
 
         try {
-            // 2. On déclenche la prise Tuya
-            await turnOnTuyaDevice();
-            
-            // La prise s'allume, le courant arrive, le PC boot, 
-            // et c'est ensuite ton bot local qui prendra le relais sur le salon !
+            // Envoi de la commande pour allumer la prise (code standard Tuya pour interrupteur : 'switch_1')
+            await sendTuyaCommand('switch_1', true);
         } catch (error) {
-            console.error(error);
-            await interaction.followUp({ content: "❌ Erreur lors de l'allumage de la prise Tuya.", ephemeral: true });
+            await interaction.followUp({ content: "❌ Erreur lors de la communication avec la prise Tuya.", ephemeral: true });
         }
     }
 });
