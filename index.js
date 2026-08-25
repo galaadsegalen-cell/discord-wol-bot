@@ -81,7 +81,7 @@ async function turnOnPC() {
           reqPost.write(JSON.stringify({ commands: [{ code: "switch_1", value: true }] }));
           reqPost.end();
 
-        } catc (e) {
+        } catch (e) {
           reject(e.message);
         }
       });
